@@ -10,3 +10,4 @@ requests
 boto3
 pillow
 python-multipart
+psycopg2-binary
