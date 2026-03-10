@@ -3,12 +3,18 @@ from dataclasses import dataclass
 from enum import Enum
 
 class FraudSignalSeverity(str, Enum):
-    LOW = "low"; MEDIUM = "medium"; HIGH = "high"; CRITICAL = "critical"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 @dataclass
 class FraudAssessment:
-    is_suspicious: bool; overall_fraud_score: float; signals: list
-    requires_manual_review: bool; rejection_recommended: bool
+    is_suspicious: bool
+    overall_fraud_score: float
+    signals: list
+    requires_manual_review: bool
+    rejection_recommended: bool
 
 class FraudDetector:
     def assess(self, image, bounding_boxes, extracted_fields, document_type="unknown"):
