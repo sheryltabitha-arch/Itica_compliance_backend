@@ -14,12 +14,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/extraction", tags=["extraction"])
 
 class ExtractRequest(BaseModel):
-    document_id: str; model_version: str = "2.0.0"
+    document_id: str
+    model_version: str = "2.0.0"
     expected_weights_hash: Optional[str] = None
-    country_hint: Optional[str] = None; min_age: int = 18
+    country_hint: Optional[str] = None
+    min_age: int = 18
 
 class ExtractResponse(BaseModel):
-    extraction_id: str; document_id: str; status: str; model_version: str; created_at: str
+    extraction_id: str
+    document_id: str
+    status: str
+    model_version: str
+    created_at: str
 
 @router.post("/extract", response_model=ExtractResponse)
 async def extract_document(request: ExtractRequest,
