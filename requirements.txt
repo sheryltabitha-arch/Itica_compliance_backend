@@ -1,6 +1,12 @@
 fastapi
-uvicorn
+uvicorn[standard]
+gunicorn
 pydantic
 python-dotenv
 sqlalchemy
-gunicorn
+asyncpg
+python-jose[cryptography]
+requests
+boto3
+pillow
+python-multipart
