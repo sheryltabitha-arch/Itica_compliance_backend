@@ -42,8 +42,7 @@ async def lifespan(app: FastAPI):
         await init_db()
         logger.info("Database initialized")
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
+        logger.warning(f"Database not available at startup: {e}")
 
     # Validate required environment variables
     required_env = [
