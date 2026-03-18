@@ -208,3 +208,11 @@ if __name__ == "__main__":
         reload=environment == "development",
         log_config=log_config,
   )
+    
+from fastapi import FastAPI
+from app.routers import decisions, audit_new
+
+app = FastAPI()
+
+app.include_router(decisions.router, prefix="/decisions", tags=["Decisions"])
+app.include_router(audit_new.router, prefix="/audit", tags=["Audit"])
