@@ -10,6 +10,7 @@ boto3
 pillow
 python-multipart
 psycopg2-binary
-supabase==2.3.0
+supabase==2.5.3
 python-jose[cryptography]==3.3.0
-httpx==0.27.0
+httpx==0.25.2
+cryptography==41.0.7
