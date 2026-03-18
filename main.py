@@ -210,7 +210,7 @@ if __name__ == "__main__":
   )
     
 from fastapi import FastAPI
-from app.routers import decisions, audit_new
+from app.routers import decisions, audit
 
 app = FastAPI()
 
