@@ -181,6 +181,12 @@ app.include_router(extraction.router, tags=["extraction"])
 # Human Review & Corrections
 app.include_router(human_review.router, tags=["review"])
 
+# Decisions (new)
+app.include_router(decisions.router, tags=["decisions"])
+
+# Audit (new)
+app.include_router(audit.router, tags=["audit"])
+
 # Compliance Reporting
 app.include_router(reports.router, tags=["reports"])
 
