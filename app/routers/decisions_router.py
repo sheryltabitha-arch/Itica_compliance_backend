@@ -1,0 +1,189 @@
+"""
+app/routers/decisions.py  (replaces/extends human_review.py)
+
+Captures compliance decisions with full tenant isolation.
+Every decision is written to Supabase and the audit trail.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+
+from app.middleware.auth import get_current_user, get_current_user_optional, get_supabase
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/decisions", tags=["decisions"])
+
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+class DecisionCreate(BaseModel):
+    decision_type: str
+    risk_tier: str
+    reference_id: str
+    rationale: str | None = None
+    officer_id: str | None = None
+    business_unit: str | None = None
+    regulatory_framework: str | None = None
+    sar_required: str | None = None
+
+
+class DecisionResponse(BaseModel):
+    id: str
+    decision_type: str
+    risk_tier: str
+    reference_id: str
+    hash: str
+    created_at: str
+    tenant_id: str
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.post("/", response_model=DecisionResponse, status_code=status.HTTP_201_CREATED)
+async def create_decision(
+    payload: DecisionCreate,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Capture a compliance decision.
+    - Writes to decisions table (tenant-isolated)
+    - Creates audit event with SHA-256 hash
+    - Links previous hash for chain integrity
+    """
+    supabase = get_supabase()
+    tenant_id = user.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="User has no tenant assigned")
+
+    # Build hash from decision content
+    hash_input = json.dumps({
+        "decision_type": payload.decision_type,
+        "risk_tier": payload.risk_tier,
+        "reference_id": payload.reference_id,
+        "rationale": payload.rationale,
+        "officer_id": payload.officer_id,
+        "tenant_id": str(tenant_id),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }, sort_keys=True)
+    decision_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+
+    # Write decision
+    result = supabase.table("decisions").insert({
+        "tenant_id": str(tenant_id),
+        "user_id": user["id"],
+        "decision_type": payload.decision_type,
+        "risk_tier": payload.risk_tier,
+        "reference_id": payload.reference_id,
+        "rationale": payload.rationale,
+        "officer_id": payload.officer_id,
+        "business_unit": payload.business_unit,
+        "regulatory_framework": payload.regulatory_framework,
+        "sar_required": payload.sar_required,
+        "hash": decision_hash,
+    }).execute()
+
+    decision = result.data[0]
+
+    # Get previous hash for chain linking
+    prev = supabase.table("audit_events") \
+        .select("hash") \
+        .eq("tenant_id", str(tenant_id)) \
+        .order("created_at", desc=True) \
+        .limit(1) \
+        .execute()
+    previous_hash = prev.data[0]["hash"] if prev.data else "GENESIS"
+
+    # Write to audit trail
+    event_count = supabase.table("audit_events") \
+        .select("id", count="exact") \
+        .eq("tenant_id", str(tenant_id)) \
+        .execute()
+    event_num = (event_count.count or 0) + 1
+
+    supabase.table("audit_events").insert({
+        "tenant_id": str(tenant_id),
+        "user_id": user["id"],
+        "event_type": "DECISION CREATED",
+        "event_id": f"EVT-{event_num:05d}",
+        "detail": f"{payload.decision_type} | Risk: {payload.risk_tier} | Ref: {payload.reference_id} | Officer: {payload.officer_id or 'N/A'}",
+        "hash": decision_hash,
+        "previous_hash": previous_hash,
+    }).execute()
+
+    logger.info(f"Decision captured: {payload.reference_id} tenant: {tenant_id}")
+
+    return DecisionResponse(
+        id=decision["id"],
+        decision_type=decision["decision_type"],
+        risk_tier=decision["risk_tier"],
+        reference_id=decision["reference_id"],
+        hash=decision_hash,
+        created_at=decision["created_at"],
+        tenant_id=str(tenant_id),
+    )
+
+
+@router.get("/")
+async def list_decisions(
+    limit: int = 50,
+    offset: int = 0,
+    user: dict = Depends(get_current_user),
+):
+    """List decisions for current user's tenant only."""
+    supabase = get_supabase()
+    tenant_id = user.get("tenant_id")
+
+    result = supabase.table("decisions") \
+        .select("*") \
+        .eq("tenant_id", str(tenant_id)) \
+        .order("created_at", desc=True) \
+        .range(offset, offset + limit - 1) \
+        .execute()
+
+    count_result = supabase.table("decisions") \
+        .select("id", count="exact") \
+        .eq("tenant_id", str(tenant_id)) \
+        .execute()
+
+    return {
+        "decisions": result.data,
+        "total": count_result.count or 0,
+        "tenant_id": str(tenant_id),
+    }
+
+
+@router.get("/stats")
+async def get_stats(user: dict = Depends(get_current_user)):
+    """Dashboard stats for current tenant."""
+    supabase = get_supabase()
+    tenant_id = str(user.get("tenant_id", ""))
+
+    decisions_count = supabase.table("decisions") \
+        .select("id", count="exact").eq("tenant_id", tenant_id).execute()
+
+    kyc_count = supabase.table("kyc_documents") \
+        .select("id", count="exact").eq("tenant_id", tenant_id).execute()
+
+    kyc_verified = supabase.table("kyc_documents") \
+        .select("id", count="exact") \
+        .eq("tenant_id", tenant_id) \
+        .eq("status", "VERIFIED & LEDGERED") \
+        .execute()
+
+    audit_count = supabase.table("audit_events") \
+        .select("id", count="exact").eq("tenant_id", tenant_id).execute()
+
+    return {
+        "total_decisions": decisions_count.count or 0,
+        "total_kyc_documents": kyc_count.count or 0,
+        "verified_kyc_documents": kyc_verified.count or 0,
+        "total_audit_events": audit_count.count or 0,
+        "tenant_id": tenant_id,
+    }
