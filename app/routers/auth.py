@@ -119,3 +119,30 @@ def _format_date(dt_str: str | None) -> str:
         return dt.strftime("%b %Y")
     except Exception:
         return datetime.now().strftime("%b %Y")
+
+async def get_current_user_optional(credentials=None):
+    if not credentials:
+        return None
+    try:
+        from fastapi.security import HTTPAuthorizationCredentials
+        if hasattr(credentials, 'credentials'):
+            payload = await verify_auth0_token(credentials.credentials)
+            return await get_or_create_user(payload)
+    except Exception:
+        return None
+
+
+def require_min_role(min_role: str):
+    ROLE_HIERARCHY = {"analyst": 0, "compliance_officer": 1, "admin": 2}
+    async def role_checker(user: dict = Depends(get_current_user)) -> dict:
+        user_role = user.get("role", "analyst")
+        if ROLE_HIERARCHY.get(user_role, 0) < ROLE_HIERARCHY.get(min_role, 0):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Requires role: {min_role}. Your role: {user_role}",
+            )
+        return user
+    return role_checker
+
+
+CurrentUser = dict
