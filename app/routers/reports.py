@@ -14,6 +14,9 @@ from fastapi.responses import JSONResponse
 
 from app.middleware.auth import CurrentUser, get_current_user, get_supabase
 
+import subprocess, json, tempfile, os
+from fastapi.responses import FileResponse
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 
