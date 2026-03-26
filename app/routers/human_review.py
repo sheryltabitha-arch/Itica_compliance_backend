@@ -147,5 +147,4 @@ async def list_reason_codes():
             "extraction_error", "low_confidence", "document_quality",
             "format_mismatch", "manual_verification", "fraud_detected", "other",
         ]
-        }    return {"reason_codes": ["extraction_error", "low_confidence", "document_quality",
-                             "format_mismatch", "manual_verification", "fraud_detected", "other"]}
+    }
