@@ -85,6 +85,45 @@ async def extract_document(
     except Exception as e:
         logger.warning(f"Supabase store failed (non-fatal): {e}")
 
+    # ── Auto-flag low confidence fields ──────────────────────────────────────────
+LOW_CONFIDENCE_THRESHOLD = 0.75
+low_confidence_fields = {
+    k: v for k, v in result["confidence_scores"].items()
+    if v < LOW_CONFIDENCE_THRESHOLD
+}
+requires_review = len(low_confidence_fields) > 0
+review_priority = "high" if len(low_confidence_fields) >= 3 else "medium" if low_confidence_fields else "low"
+
+# Update Supabase record with review flag
+if low_confidence_fields:
+    try:
+        sb = get_supabase()
+        sb.table("extractions").update({
+            "status": "requires_review",
+            "review_priority": review_priority,
+            "low_confidence_fields": low_confidence_fields,
+        }).eq("id", extraction_id).execute()
+    except Exception as e:
+        logger.warning(f"Review flag update failed (non-fatal): {e}")
+
+# ── Sanctions screening ───────────────────────────────────────────────────────
+try:
+    from app.services.sanctions import screen_entity
+    full_name   = result["fields"].get("full_name", "")
+    dob         = result["fields"].get("date_of_birth", "")
+    nationality = result["fields"].get("nationality", "")
+    if full_name:
+        sanctions_result = screen_entity(full_name, dob, nationality)
+        if sanctions_result.get("match"):
+            sb = get_supabase()
+            sb.table("extractions").update({
+                "status": "sanctions_hit",
+                "review_priority": "high",
+                "sanctions_result": sanctions_result,
+            }).eq("id", extraction_id).execute()
+            logger.warning(f"SANCTIONS HIT: {full_name} | extraction {extraction_id}")
+except Exception as e:
+    logger.warning(f"Sanctions screening failed (non-fatal): {e}")
     # Audit log
     if _audit_available:
         try:
