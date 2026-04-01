@@ -54,7 +54,11 @@ async def extract_document(
 
     # ── Run extraction ────────────────────────────────────────────────────────
     try:
-        result = extract_document_fields(image_bytes, storage_path=storage_path)
+        result = extract_document_fields(
+    image_bytes,
+    storage_path=storage_path,
+    document_type=request.model_version or "passport",
+        )
     except RuntimeError as e:
         if "loading" in str(e).lower():
             raise HTTPException(503, "Extraction model is warming up, please retry in 20 seconds")
