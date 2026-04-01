@@ -72,7 +72,8 @@ def _parse_fields(raw_fields: dict) -> dict[str, Any]:
         if not field:
             return
         value = getattr(field, "value", None)
-        confidence = float(getattr(field, "confidence", None) or 0.80)
+        conf = getattr(field, "confidence", None)
+confidence = float(conf.value) if hasattr(conf, "value") else float(conf or 0.80)
         if value and str(value).lower() not in ("", "none", "n/a", "null"):
             fields[our_key] = str(value).strip()
             confidence_scores[our_key] = round(confidence, 4)
